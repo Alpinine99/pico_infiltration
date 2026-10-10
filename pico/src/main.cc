@@ -1,14 +1,14 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
-#include <pico/stdlib.h>
 #include <pico/time.h>
+#include <pico/stdlib.h>
 #include <pico/unique_id.h>
 #include <pico/cyw43_arch.h>
 #include <hardware/watchdog.h>
-#include "conn_man.hpp"
-#include "helper.h"
 #include "common_types.h"
+#include "conn_man.hpp"
+#include "HCSR04.h"
 
 #if NLOGGING == 1
 #define DEBUG_printf(...)
@@ -17,12 +17,7 @@
 #endif
 
 #define TOLERANCE 10
-
-typedef struct {
-  float a;
-  float b;
-  float c;
-} readings_t;
+#define N_SENSORS 3
 
 static void app(void *args);
 static bool connect_wifi(int max_retry);
@@ -30,13 +25,14 @@ static void error_indicator(int timeout_s);
 static void heart_beat(void* args);
 static void worker_updater(void* args);
 static void print_pico_cmd(pico_command_t cmd);
+static void print_distances(hc_reading_t *hc_values);
 static void gen_unique_id(uint8_t* g_uid);
 
-static readings_t* dists = new readings_t;
 static uint8_t g_uid[MAX_UID_LEN];
 static bool exit_task = false;
 static TaskHandle_t worker_h = NULL;
 static TaskHandle_t heart_beat_h = NULL;
+static TaskHandle_t hc_sonar_h = NULL;
 
 int main(void) {
   stdio_init_all();
@@ -57,11 +53,7 @@ static void app(void *args) {
     vTaskDelay(pdMS_TO_TICKS(100));
 #endif
 
-  dists->a = 100;
-  dists->b = 333;
-  dists->c = 500;
-  gen_unique_id(g_uid); 
-
+  gen_unique_id(g_uid);
   while (cyw43_arch_init()) {
     DEBUG_printf("Failed to init wifi");
     vTaskDelay(pdMS_TO_TICKS(3000));
@@ -73,10 +65,13 @@ start_execution:
   DEBUG_printf("Execution starting ... ");
   Conn_man conn(SERVER_ADDRESS, SERVER_PORT);
   uint error_tolerance = TOLERANCE;
+  static const hc_pin_t sonar_pins[N_SENSORS] = { {19, 16}, {20, 17}, {21, 18} };
+  static hc_pVparams_t hc_params = { .n_sensors = N_SENSORS, .pins = (hc_pin_t*) sonar_pins, .wait_ms = 250 };
+  hc_reading_t hc_values[N_SENSORS];
   
   pico_command_t cmd;
   pico_dat_t pkt;
-  uint rate = 5000;
+  uint rate = 15000;
 
 start_heatbeat:
   if (error_tolerance <= 0) {
@@ -100,6 +95,10 @@ start_heatbeat:
   error_tolerance = TOLERANCE;
 
 connect_2_wifi: 
+  if (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) == CYW43_LINK_UP) {
+    cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
   while (!connect_wifi(30)) {
     DEBUG_printf("Wifi connection failed, sleeping");
     vTaskDelay(pdMS_TO_TICKS(30000));
@@ -118,6 +117,28 @@ connect_2_server:
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
   DEBUG_printf("Connected to server");
+
+create_sonar_worker:
+  if (error_tolerance <= 0) {
+    DEBUG_printf("Error tolerance reached: %d", error_tolerance);
+    goto reboot;
+  }
+  if (hc_sonar_is_running()) {
+    hc_sonar_kill_task();
+    while (hc_sonar_is_running()) vTaskDelay(pdMS_TO_TICKS(10));
+  }
+  hc_sonar_h = NULL;
+
+  DEBUG_printf("Starting sonar worker thread");
+  if (xTaskCreate(
+        hc_sonar_task, "sensors", 1024, &hc_params, tskIDLE_PRIORITY + 1, &hc_sonar_h
+    ) != pdPASS) { 
+    DEBUG_printf("failed to start sonar worker");
+    error_indicator(5);
+    error_tolerance--;
+    goto create_worker;
+  }
+  error_tolerance = TOLERANCE;
 
 create_worker:
   if (error_tolerance <= 0) {
@@ -142,13 +163,13 @@ create_worker:
 
   DEBUG_printf("Starting cmd reader");
   while (
-      worker_h && conn.s_is_connected() &&
+      worker_h && conn.s_is_connected() && hc_sonar_is_running() && 
       cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) == CYW43_LINK_UP
       ) {
     int n = conn.s_read(&cmd);
     if (n == 1) {
       DEBUG_printf("received [%d] from server", n);
-      // print_pico_cmd(cmd);
+      print_pico_cmd(cmd);
       switch (cmd.type) {
         case CMD_REBOOT:
           DEBUG_printf("Received reboot intent from server");
@@ -166,7 +187,6 @@ create_worker:
 
   // if wifi disconnects
   if (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) != CYW43_LINK_UP) {
-    cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
     DEBUG_printf("Wifi connection lost");
     error_indicator(3);
     conn.s_close();
@@ -186,15 +206,23 @@ create_worker:
     goto create_worker;
   }
 
+  // if sensors go dead
+  if (!hc_sonar_is_running()) {
+    DEBUG_printf("sensor task is dead");
+    hc_sonar_h = NULL;
+    goto create_sonar_worker;
+  }
+
 reboot:
   DEBUG_printf("rebooting pico");
   if (conn.s_is_connected()) conn.s_close();
   if (heart_beat_h) vTaskDelete(heart_beat_h);
   if (worker_h) vTaskDelete(worker_h);
+  if (hc_sonar_h) vTaskDelete(hc_sonar_h);
   if (cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA) != 0)
     DEBUG_printf("wifi leave failed");
 
-  error_indicator(10);
+  error_indicator(5);
   cyw43_arch_disable_sta_mode();
   cyw43_arch_deinit();
   watchdog_reboot(0, 0, 100);   // reboot after 100 ms
@@ -202,9 +230,12 @@ reboot:
 
 sleep_for:
   exit_task = true;
+  hc_sonar_kill_task();
   DEBUG_printf("Waiting for workers to exit");
-  while (worker_h || heart_beat_h)
+  while (worker_h || heart_beat_h || hc_sonar_is_running())
     vTaskDelay(pdMS_TO_TICKS(100));
+  hc_sonar_h = NULL;
+
   if (conn.s_is_connected()) conn.s_close();
   if (cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA) != 0)
     DEBUG_printf("wifi leave failed");
@@ -235,11 +266,17 @@ static void heart_beat(void *args) {
 }
 
 static void print_pico_cmd(pico_command_t cmd) {
-  DEBUG_printf("\n==== pico command ====\n"
-               "  TYPE: %s\n"
-               "  SLEEP_N_SEC: %d\n"
-               "======================\n",
-               (cmd.type == CMD_REBOOT ? "reboot" : cmd.type == CMD_SLEEP ? "sleep" : "ping"), cmd.sleep_n_sec);
+  DEBUG_printf("==== pico command ====");
+  DEBUG_printf(" TYPE: %s", (cmd.type == CMD_REBOOT ? "reboot" : cmd.type == CMD_SLEEP ? "sleep" : "ping"));
+  DEBUG_printf(" SLEEP_N_SEC: %d", cmd.sleep_n_sec);
+  DEBUG_printf("======================");
+}
+
+static void print_distances(hc_reading_t *hc_values) {
+    DEBUG_printf("====== values ======");
+    for (int i=0; i<N_SENSORS; i++)
+      DEBUG_printf(" echo_us: %ld, dist_cm: %3.f", hc_values[i].echo_us, hc_values[i].dist_cm);
+    DEBUG_printf("====================");
 }
 
 static void gen_unique_id(uint8_t* g_uid) {
@@ -263,20 +300,31 @@ static void worker_updater(void* args) {
   Conn_man *conn = (Conn_man*) args;
   DEBUG_printf("Worker started");
   while (!exit_task) {
+    hc_reading_t r[N_SENSORS];
+    float d[N_SENSORS] = { -1.f, -1.f, -1.f };
+    
+    uint n = hc_sonar_get_values(r, 3, 0);
+    for (int i=0; i<n; i++)
+      d[i] = r[i].dist_cm;
+    if (!n) DEBUG_printf("Nothing read from hc_sonar");
+
+    print_distances(r);
     pico_dat_t data = {
       .magic  = PACKET_MAGIC,
       .uptime = (uint32_t)(time_us_64() / 1000000ULL),    // wraps in 136 years
       .heap_free = xPortGetFreeHeapSize(),
       .heap_min_free = xPortGetMinimumEverFreeHeapSize(),
       .battery_mv = 3000,
-      .dist = {dists->a, dists->b, dists->c}
+      .dist = { d[0], d[1], d[2] }
     };
     memcpy(&data.uid, g_uid, sizeof(data.uid));
+    
     DEBUG_printf("s_send sending update");
     if (!conn->s_send(&data)) {
       DEBUG_printf("s_send failed");
       break;
     }
+    
     DEBUG_printf("Update sent to server");
     vTaskDelay(pdMS_TO_TICKS(5000));
   }

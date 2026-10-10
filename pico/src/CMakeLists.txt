@@ -21,6 +21,7 @@ if ((NOT WIFI_SSID) OR (NOT SERVER_ADDRESS) OR (NOT ROOM_LOCATION))
   return()
 endif()
 
+# Conn_man library
 add_library(conn_man
   conn_man.cc
 )
@@ -37,21 +38,33 @@ target_link_libraries(conn_man
   FreeRTOS-Kernel
 )
 
-add_library(chelper
-  helper.c
+target_compile_definitions(conn_man
+  PRIVATE NLOGGING=1
 )
 
-target_include_directories(chelper
+# HCSR04 library
+add_library(HCSR04
+  HCSR04.c
+)
+
+target_include_directories(HCSR04
   PRIVATE ${CMAKE_SOURCE_DIR}/include
 )
 
-target_link_libraries(chelper
+target_link_libraries(HCSR04
   PRIVATE pico_stdlib
   pico_lwip_freertos
   pico_cyw43_arch_lwip_sys_freertos
   FreeRTOS-Kernel
 )
 
+target_compile_definitions(HCSR04
+  PRIVATE HC_MAX_SENSORS=3
+  HC_MAX_DIST_CM=1000
+  NLOGGING=1
+)
+
+# app compilation
 add_executable(${PROJECT_NAME}
   main.cc
 )
@@ -63,7 +76,7 @@ target_link_libraries(${PROJECT_NAME}
   hardware_watchdog
   FreeRTOS-Kernel
   FreeRTOS-Kernel-Heap4
-  chelper
+  HCSR04
   conn_man
 )
 
@@ -73,7 +86,8 @@ target_include_directories(${PROJECT_NAME}
 )
 
 target_compile_definitions(${PROJECT_NAME}
-  PRIVATE ROOM_LOCATION=\"${ROOM_LOCATION}\"
+  PRIVATE NLOGGING=1
+  ROOM_LOCATION=\"${ROOM_LOCATION}\"
   WIFI_SSID=\"${WIFI_SSID}\"
   WIFI_PASSWORD=\"${WIFI_PASSWORD}\"
   SERVER_ADDRESS=\"${SERVER_ADDRESS}\"

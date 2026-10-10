@@ -5,7 +5,12 @@
 #include <pico/stdlib.h>
 #include <pico/unique_id.h>
 #include <pico/cyw43_arch.h>
+
+#include <hardware/adc.h>
+#include <hardware/gpio.h>
 #include <hardware/watchdog.h>
+#include <hardware/structs/padsbank0.h>
+
 #include "common_types.h"
 #include "conn_man.hpp"
 #include "HCSR04.h"
@@ -19,6 +24,11 @@
 #define TOLERANCE 10
 #define N_SENSORS 3
 
+#define VSYS_GPIO 29
+#define VSYS_ADC_CH 3
+#define VSYS_SAMPLES 16
+
+
 static void app(void *args);
 static bool connect_wifi(int max_retry);
 static void error_indicator(int timeout_s);
@@ -27,6 +37,7 @@ static void worker_updater(void* args);
 static void print_pico_cmd(pico_command_t cmd);
 static void print_distances(hc_reading_t *hc_values);
 static void gen_unique_id(uint8_t* g_uid);
+static uint16_t read_vsys_mv(void);
 
 static uint8_t g_uid[MAX_UID_LEN];
 static bool exit_task = false;
@@ -314,7 +325,7 @@ static void worker_updater(void* args) {
       .uptime = (uint32_t)(time_us_64() / 1000000ULL),    // wraps in 136 years
       .heap_free = xPortGetFreeHeapSize(),
       .heap_min_free = xPortGetMinimumEverFreeHeapSize(),
-      .battery_mv = 3000,
+      .battery_mv = read_vsys_mv(),
       .dist = { d[0], d[1], d[2] }
     };
     memcpy(&data.uid, g_uid, sizeof(data.uid));
@@ -331,6 +342,28 @@ static void worker_updater(void* args) {
   DEBUG_printf("Worker exiting ... ");
   worker_h = NULL;
   vTaskDelete(NULL);
+}
+
+static uint16_t read_vsys_mv(void) {
+  cyw43_thread_enter();
+  gpio_function_t func = gpio_get_function(VSYS_GPIO);
+  uint32_t  pad = padsbank0_hw->io[VSYS_GPIO];
+
+  adc_init();
+  adc_gpio_init(VSYS_GPIO);
+  adc_select_input(VSYS_ADC_CH);
+
+  for (int i=0; i<4; ++i) (void) adc_read();
+  uint32_t sum = 0;
+  for (int i=0; i<VSYS_SAMPLES; ++i) sum += adc_read();
+
+  gpio_set_function(VSYS_GPIO, func);
+  padsbank0_hw->io[VSYS_GPIO] = pad;
+
+  cyw43_thread_exit();
+
+  uint32_t raw = sum / VSYS_SAMPLES;
+  return (uint16_t) (raw * 3u * 3300u / 4096u);
 }
 
 static void error_indicator(int timeout_s) {

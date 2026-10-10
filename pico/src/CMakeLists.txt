@@ -73,6 +73,7 @@ target_link_libraries(${PROJECT_NAME}
   PRIVATE pico_stdlib
   pico_lwip_freertos 
   pico_cyw43_arch_lwip_sys_freertos
+  hardware_adc
   hardware_watchdog
   FreeRTOS-Kernel
   FreeRTOS-Kernel-Heap4

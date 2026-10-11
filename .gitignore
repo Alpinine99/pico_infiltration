@@ -4,4 +4,7 @@ build.env
 *.db*
 *.sqlite3*
 *.log
+*.bac
+*__pycache__*
+*/appstatic/*
 

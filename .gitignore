@@ -1,4 +1,7 @@
 *build*
 *.swp
 *creds
+*.db*
+*.sqlite3*
+*.log
 

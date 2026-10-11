@@ -352,14 +352,12 @@ static uint16_t read_vsys_mv(void) {
   adc_init();
   adc_gpio_init(VSYS_GPIO);
   adc_select_input(VSYS_ADC_CH);
-
   for (int i=0; i<4; ++i) (void) adc_read();
   uint32_t sum = 0;
   for (int i=0; i<VSYS_SAMPLES; ++i) sum += adc_read();
 
   gpio_set_function(VSYS_GPIO, func);
   padsbank0_hw->io[VSYS_GPIO] = pad;
-
   cyw43_thread_exit();
 
   uint32_t raw = sum / VSYS_SAMPLES;

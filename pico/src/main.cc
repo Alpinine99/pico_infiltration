@@ -118,13 +118,13 @@ connect_2_wifi:
 connect_2_server:
   DEBUG_printf("Connecting to server");
   while (!conn.s_connect()) {
+    conn.s_close();
     DEBUG_printf("failed to connect to server");
     error_indicator(5);
     if (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) != CYW43_LINK_UP) {
       DEBUG_printf("Wifi connection lost");
       goto connect_2_wifi;
     }
-    conn.s_close();
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
   DEBUG_printf("Connected to server");

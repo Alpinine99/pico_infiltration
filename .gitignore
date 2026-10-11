@@ -1,6 +1,6 @@
-*build*
+*/build/*
 *.swp
-*creds
+build.env
 *.db*
 *.sqlite3*
 *.log

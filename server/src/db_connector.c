@@ -6,9 +6,9 @@
 static sqlite3      *db;
 static sqlite3_stmt *ins;
 
-int db_open(const char *path) {
-  INFO(TAG "opening db at: %s", path);
-  if (sqlite3_open(path, &db) != SQLITE_OK) {
+int db_open(void) {
+  INFO(TAG "opening db at: %s", DB_PATH);
+  if (sqlite3_open(DB_PATH, &db) != SQLITE_OK) {
     ERROR_ERRNO(TAG "open: %s\n", sqlite3_errmsg(db));
     return -1;
   }

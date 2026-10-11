@@ -36,7 +36,7 @@ static volatile sig_atomic_t g_stop = 0;
 
 
 int main(void) {
-  log_open();
+  if (log_open() == -1) return 1;
   install_signal();
   int fd, opt = 1;
   struct sockaddr_in sock = {
@@ -95,12 +95,14 @@ int main(void) {
 
 clean_up:
   DEBUG(TAG "Socket clean up ...");
+  db_close();
   log_close();
   close(fd);
   return 0;
 
 cleanup_error:
   DEBUG(TAG "Cleanup after error ... ");
+  db_close();
   log_close();
   close(fd);
   return 1;
@@ -117,6 +119,7 @@ void* handle_conn(void* conn) {
   INFO(TAG "Connection from %s:%d", ip, port);
 
   pico_dat_t picodata;
+  db_open();
   while (true) {
     int n = read_pico_data(picofd, &picodata);
     if (n == 1) {
@@ -127,7 +130,7 @@ void* handle_conn(void* conn) {
       goto cleanup_pico;
     }
 
-    // TODO: Log to database
+    db_log(&picodata);
     
     pico_command_t cmd = {
       .magic = PACKET_MAGIC,
@@ -139,6 +142,7 @@ void* handle_conn(void* conn) {
 
 cleanup_pico:
   DEBUG(TAG "Cleanup on clent %s:%d", ip, port);
+  db_close();
   close(picofd);
   return NULL;
 }

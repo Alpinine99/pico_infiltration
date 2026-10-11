@@ -9,8 +9,8 @@
 void print_pico_data(pico_dat_t d);
 
 int main(void) {
-  log_open();
-  db_open("pico.db");
+  if (log_open() == -1) return 1;
+  db_open();
   for (int i=0; i<10; i++) {
     pico_dat_t data = {
       .uptime = i * 30,

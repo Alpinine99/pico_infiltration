@@ -21,6 +21,13 @@ if ((NOT WIFI_SSID) OR (NOT SERVER_ADDRESS) OR (NOT ROOM_LOCATION))
   return()
 endif()
 
+if (DEFINED ENV{NLOGGING} AND (NOT DEFINED NLOGGING))
+  set(NLOGGING $ENV{NLOGGING})
+elseif(NOT DEFINED NLOGGING)
+  set(NLOGGING 0)
+endif()
+message("Using NLOGGING '${NLOGGING}'")
+
 # Conn_man library
 add_library(conn_man
   conn_man.cc
@@ -39,7 +46,7 @@ target_link_libraries(conn_man
 )
 
 target_compile_definitions(conn_man
-  PRIVATE NLOGGING=1
+  PRIVATE NLOGGING=${NLOGGING}
 )
 
 # HCSR04 library
@@ -61,7 +68,7 @@ target_link_libraries(HCSR04
 target_compile_definitions(HCSR04
   PRIVATE HC_MAX_SENSORS=3
   HC_MAX_DIST_CM=1000
-  NLOGGING=1
+  NLOGGING=${NLOGGING}
 )
 
 # app compilation
@@ -87,7 +94,7 @@ target_include_directories(${PROJECT_NAME}
 )
 
 target_compile_definitions(${PROJECT_NAME}
-  PRIVATE NLOGGING=1
+  PRIVATE NLOGGING=${NLOGGING}
   ROOM_LOCATION=\"${ROOM_LOCATION}\"
   WIFI_SSID=\"${WIFI_SSID}\"
   WIFI_PASSWORD=\"${WIFI_PASSWORD}\"

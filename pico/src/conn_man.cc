@@ -51,9 +51,8 @@ int Conn_man::s_read(pico_command_t* cmd) {
   while (n) {
     int r = recv(this->fd, p, n, 0);
     if (r == 0) return 0;
-    if (r < 0) {
+    else if (r < 0) {
       ERROR("s_read failed: %d", r);
-      this->is_connected = false;
       return -1;
     }
     p += r;

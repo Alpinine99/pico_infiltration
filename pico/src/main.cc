@@ -195,6 +195,7 @@ create_worker:
       DEBUG_printf("failed to recv cmd from server");
     }
   }
+  DEBUG_printf("cmd reader stopped");
 
   // if wifi disconnects
   if (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) != CYW43_LINK_UP) {

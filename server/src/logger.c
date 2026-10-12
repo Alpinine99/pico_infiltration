@@ -1,4 +1,5 @@
-#include "config.h"
+#include "logger.h"
+
 #include <stdarg.h>
 #include <time.h>
 

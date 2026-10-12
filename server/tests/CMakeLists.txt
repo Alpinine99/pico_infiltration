@@ -1,3 +1,4 @@
+# db test
 add_executable(db_test
   db_test.c
 )

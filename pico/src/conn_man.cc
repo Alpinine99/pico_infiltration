@@ -6,7 +6,7 @@ Conn_man::Conn_man(const char *ip, uint16_t port) {
   this->port = port;
 }
 
-bool Conn_man::s_connect() {
+bool Conn_man::s_connect(void) {
   if ((this->fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
     ERROR("Failed to create socket: %d", errno);
     this->is_connected = false;
@@ -42,6 +42,7 @@ bool Conn_man::s_send(pico_dat_t* data) {
     this->is_connected = false;
     return false;
   }
+  n_misses = 0;
   return true;
 }
 
@@ -53,24 +54,28 @@ int Conn_man::s_read(pico_command_t* cmd) {
     if (r == 0) return 0;
     else if (r < 0) {
       ERROR("s_read failed: %d", r);
+      if (n_misses >= n_missed_max)
+        this->is_connected = false;
+      n_misses++;
       return -1;
     }
     p += r;
     n -= r;
   }
+  n_misses = 0;
   return 1;
 }
 
-bool Conn_man::s_is_connected() {
+bool Conn_man::s_is_connected(void) {
   return this->is_connected;
 }
 
-void Conn_man::s_close() {
+void Conn_man::s_close(void) {
   this->is_connected = false;
   close(this->fd);
 }
 
-Conn_man::~Conn_man() {
+Conn_man::~Conn_man(void) {
   this->is_connected = false;
   close(this->fd);
 }

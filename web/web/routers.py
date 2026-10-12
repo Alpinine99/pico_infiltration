@@ -14,4 +14,3 @@ class PicoRouter:
         if app_label == self.app_label or db == "pico":
             return False
         return None
-

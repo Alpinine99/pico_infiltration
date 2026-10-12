@@ -7,7 +7,7 @@
 #define PORT 9090
 #define MAX_CONN 4
 #define SOCK_READ_TIMEOUT (1000 * 10)
-#define LOGFILE "server.log"
+#define LOGFILE "../server.log"
 #define DB_PATH "../pico_db.sqlite3"
 
 typedef enum { LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR } log_level_t;

@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-om5di_u=1k8pn-klted50l&bapn0xhcf@e@zb+*-y_ivmcu$9p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -129,3 +129,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'appstatic')
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Pico controls
+PICO_CONTROL_ADDR = ("127.0.0.1", 9091)
+PICO_SERVER_LOG = BASE_DIR / "../server.log" 
+

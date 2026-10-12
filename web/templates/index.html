@@ -1,109 +1,172 @@
-<!doctype html>
-
-{% load static %}
-
+{% load static %}<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0f172a" />
-    <link rel="stylesheet" type="text/css" href="{% static 'main.css' %}" />
-    <title>Device Readings Dashboard</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token }}" />
+    <title>Pico monitor</title>
+    <link rel="stylesheet" href="{% static 'app.css' %}" />
   </head>
-  <body>
-    <main class="dashboard">
-      <header class="header">
-        <div class="heading">
-          <h1>Device Readings</h1>
-          <p>Monitor device telemetry and battery measurements.</p>
+  <body
+    data-readings="{% url 'api_readings' %}"
+    data-log="{% url 'api_log' %}"
+    data-download="{% url 'download' %}"
+    data-reboot="{% url 'reboot' pico_id='__ID__' %}"
+    data-sleep="{% url 'sleep' pico_id='__ID__' %}"
+  >
+    <header class="bar">
+      <div class="brand">
+        <span class="dot" id="conn-dot"></span>
+        <span>Pico monitor</span>
+        <span class="muted" id="conn-text">connecting…</span>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" id="btn-notify" type="button">
+          Enable alerts
+        </button>
+        <button class="btn" id="btn-download" type="button">Download</button>
+        <button class="btn" id="btn-sleep" type="button">Sleep</button>
+        <button class="btn danger" id="btn-reboot" type="button">Reboot</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section id="devices" class="devices" aria-label="Picos"></section>
+
+      <section class="card">
+        <div class="card-head">
+          <div class="row">
+            <h2>Distance</h2>
+            <select
+              id="chart-device"
+              aria-label="Pico shown on the graph"
+            ></select>
+          </div>
+          <div
+            class="row tuning"
+            title="A line turns red when a reading differs from the previous normal reading by at least the threshold, and the next readings stay within the tolerance of the new level."
+          >
+            <label
+              >Jump ≥
+              <input id="tn-thresh" type="number" min="1" step="1" /> cm</label
+            >
+            <label
+              >held for
+              <input id="tn-k" type="number" min="1" step="1" /> readings</label
+            >
+            <label
+              >±<input id="tn-tol" type="number" min="0" step="1" /> cm</label
+            >
+          </div>
         </div>
-
-        <div class="status">
-          <span class="status-dot" aria-hidden="true"></span>
-          Readings Dashboard
+        <div class="chart-wrap">
+          <canvas id="chart"></canvas>
+          <div class="empty" id="chart-empty">Waiting for data…</div>
         </div>
-      </header>
+      </section>
 
-      <section class="table-card" aria-labelledby="readings-title">
-        <div class="table-toolbar">
-          <h2 id="readings-title">Telemetry Records</h2>
-          <span>Battery · D0 · D1 · D2</span>
+      <section class="card">
+        <div class="card-head">
+          <div class="tabs">
+            <button class="tab on" id="tab-frames" type="button">
+              Data frames
+            </button>
+            <button class="tab" id="tab-server" type="button">
+              Server log
+            </button>
+          </div>
+          <button class="btn small" id="btn-latest" type="button" hidden>
+            ↓ latest
+          </button>
         </div>
-
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Timestamp</th>
-                <th scope="col">Device</th>
-                <th scope="col">Battery (mV)</th>
-                <th scope="col">D0</th>
-                <th scope="col">D1</th>
-                <th scope="col">D2</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {% for r in readings %}
-              <tr>
-                <td class="time">
-                  <time datetime="{{ r.time|date:'c' }}">
-                    {{ r.time|date:"Y-m-d H:i:s" }}
-                  </time>
-                </td>
-
-                <td class="device">{{ r.device }}</td>
-
-                <td>
-                  <span class="battery">
-                    <span class="battery-icon" aria-hidden="true"></span>
-                    {{ r.battery_mv }}
-                  </span>
-                </td>
-
-                <td>
-                  {% if r.d0 is not None %}
-                  <span class="reading">{{ r.d0 }}</span>
-                  {% else %}
-                  <span class="reading empty-reading">-</span>
-                  {% endif %}
-                </td>
-
-                <td>
-                  {% if r.d1 is not None %}
-                  <span class="reading">{{ r.d1 }}</span>
-                  {% else %}
-                  <span class="reading empty-reading">-</span>
-                  {% endif %}
-                </td>
-
-                <td>
-                  {% if r.d2 is not None %}
-                  <span class="reading">{{ r.d2 }}</span>
-                  {% else %}
-                  <span class="reading empty-reading">-</span>
-                  {% endif %}
-                </td>
-              </tr>
-              {% empty %}
-              <tr>
-                <td colspan="6" style="padding: 48px 24px; text-align: center">
-                  <strong>No readings yet</strong>
-                  <p style="color: #8da1bc; margin-bottom: 0">
-                    Device readings will appear here when available.
-                  </p>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-
-        <footer class="table-footer">
-          <span>Device telemetry</span>
-          <span>All timestamps use the configured Django timezone.</span>
-        </footer>
+        <div class="log" id="log" tabindex="0" aria-live="off"></div>
       </section>
     </main>
+
+    <dialog id="dlg-reboot">
+      <form method="dialog">
+        <h3>Reboot a Pico</h3>
+        <label
+          >Pico id
+          <select id="rb-device"></select
+        ></label>
+        <p class="muted">The Pico restarts immediately and rejoins Wi-Fi.</p>
+        <div class="dlg-actions">
+          <button class="btn ghost" value="cancel">Cancel</button>
+          <button class="btn danger" id="go-reboot" type="button">
+            Reboot
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dlg-sleep">
+      <form method="dialog">
+        <h3>Put a Pico to sleep</h3>
+        <label
+          >Pico id
+          <select id="sl-device"></select
+        ></label>
+        <label
+          >Sleep for
+          <input
+            id="sl-seconds"
+            type="number"
+            min="3"
+            max="86400"
+            step="1"
+            value="60"
+          />
+          seconds</label
+        >
+        <p class="muted">
+          3 – 86400 s. It disconnects, sleeps, then reconnects by itself.
+        </p>
+        <div class="dlg-actions">
+          <button class="btn ghost" value="cancel">Cancel</button>
+          <button class="btn primary" id="go-sleep" type="button">Sleep</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dlg-download">
+      <form method="dialog">
+        <h3>Download data</h3>
+        <label
+          >Format
+          <select id="dl-format">
+            <option value="csv">CSV (spreadsheet)</option>
+            <option value="json">JSON</option>
+            <option value="jsonl">JSON Lines</option>
+            <option value="txt">Plain text log</option>
+          </select>
+        </label>
+        <label
+          >Pico
+          <select id="dl-device"></select
+        ></label>
+        <label
+          >Range
+          <select id="dl-range">
+            <option value="1h">Last hour</option>
+            <option value="24h" selected>Last 24 hours</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="all">Everything</option>
+          </select>
+        </label>
+        <div class="dlg-actions">
+          <button class="btn ghost" value="cancel">Cancel</button>
+          <button class="btn primary" id="go-download" type="button">
+            Download
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+
+    <script src="{% static 'chart.umd.min.js' %}"></script>
+    <script src="{% static 'app.js' %}"></script>
   </body>
 </html>

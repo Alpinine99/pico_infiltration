@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -15,31 +16,17 @@
 #include <signal.h>
 
 #include "common_types.h"
+#include "conn_types.h"
+#include "control.h"
 #include "logger.h"
 #include "config.h"
 #include "db.h"
 
 #define TAG "main: "
 
-typedef struct {
-  int fd;
-  bool alive;
-  bool ismanaged;
-  char uid[MAX_UID_LEN];
-  struct sockaddr_in addr;
-} conn_t;
-
-typedef struct {
-  size_t size;
-  size_t max;
-  conn_t* conns;
-} conn_arr_t;
-
 
 void* handle_conn(void*);
-void* pico_control(void*);
 int read_pico_data(int picofd, pico_dat_t* data);
-int send_pico_cmd(int picofd, pico_command_t* cmd);
 static void log_pico_data(pico_dat_t picodata);
 static void on_signal(int sig);
 static void install_signal(void);
@@ -141,7 +128,7 @@ void* handle_conn(void* conn) {
       if (picoconn->uid[0] == '\0') memcpy(&picoconn->uid, &picodata.uid, MAX_UID_LEN);
       INFO(TAG "received [%d] from client %s:%d (%s)", n, ip, port, picoconn->uid);
       if (!picoconn->ismanaged && picoconn->uid[0] != '\0') {
-        if (pthread_create(&control_handle, NULL, pico_control, picoconn) != 0) {
+        if (pthread_create(&control_handle, NULL, control_pico_thread, picoconn) != 0) {
           ERROR_ERRNO(TAG "failed to create pico_control for client %s:%d (%s)", ip, port, picoconn->uid);
           picoconn->uid[0] = '\0';
         } else picoconn->ismanaged = true;
@@ -159,28 +146,12 @@ void* handle_conn(void* conn) {
       .type = CMD_PING,
       .sleep_n_sec = 10
     };
-    send_pico_cmd(picofd, &cmd);
+    control_pico_send_cmd(picofd, &cmd);
   }
 
   INFO(TAG "Cleanup on clent %s:%d", ip, port);
+  picoconn->alive = false;
   close(picofd);
-  return NULL;
-}
-
-void* pico_control(void* conn) {
-  conn_t* picoconn = (conn_t*) conn;
-  char ip[INET_ADDRSTRLEN] = {0};
-  struct sockaddr_in picoaddr = picoconn->addr;
-  inet_ntop(AF_INET, &picoaddr.sin_addr, ip, INET_ADDRSTRLEN);
-  uint16_t port = ntohs(picoaddr.sin_port);
-
-  INFO("starting control on client %s:%d (%s)", ip, port, picoconn->uid);
-  char path[sizeof(UNIX_SOCK_PATH) + MAX_UID_LEN + 3];
-  snprintf(path, sizeof(path), "%s.%s", UNIX_SOCK_PATH, picoconn->uid);
-  INFO("unix sock path '%s' client %s:%d (%s)", path, ip, port, picoconn->uid);
-
-  WARNING("stopping control on client %s:%d (%s)", ip, port, picoconn->uid);
-  picoconn->ismanaged = true;
   return NULL;
 }
 
@@ -202,13 +173,6 @@ int read_pico_data(int picofd, pico_dat_t* data) {
     n -= r;
   }
   return 1;
-}
-
-int send_pico_cmd(int picofd, pico_command_t* cmd) {
-  int n;
-  if ((n = send(picofd, cmd, sizeof(pico_command_t), 0)) <= 0)
-    ERROR(TAG "send_pico_cmd failed: %d", n);
-  return n;
 }
 
 static void log_pico_data(pico_dat_t picodata) {

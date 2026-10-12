@@ -131,6 +131,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'appstatic')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Pico controls
-PICO_CONTROL_ADDR = ("127.0.0.1", 9091)
+PICO_CONTROL_ADDR = BASE_DIR / "../control.sock"
 PICO_SERVER_LOG = BASE_DIR / "../server.log" 
 

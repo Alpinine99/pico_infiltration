@@ -32,6 +32,20 @@ target_link_libraries(db_connector
   logger
 )
 
+# control
+add_library(control
+  src/control.c
+)
+
+target_include_directories(control
+  PRIVATE include
+  ../common/include
+)
+
+target_link_libraries(control
+  PRIVATE logger
+)
+
 add_subdirectory(src)
 add_subdirectory(tests)
 

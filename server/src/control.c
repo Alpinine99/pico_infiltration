@@ -103,7 +103,7 @@ void* control_pico_thread(void* conn) {
 
 unix_cleanup:
   WARNING(TAG "control stopped on client %s:%d (%s)", ip, port, picoconn->uid);
-  picoconn->ismanaged = true;
+  picoconn->ismanaged = false;
   unlink(path);
   close(fd);
   return NULL;
@@ -115,5 +115,37 @@ int control_pico_send_cmd(int picofd, pico_command_t* cmd) {
     ERROR(TAG "control_pico_send_cmd failed: %d", n);
   else INFO(TAG "control_pico_send_cmd sent pico command");
   return n;
+}
+
+int control_pico_read_data(int picofd, pico_dat_t* data) {
+  int n = sizeof(pico_dat_t);
+  uint8_t *p = (uint8_t*) data;
+  
+  struct timeval tv = { .tv_sec = 10 };
+  setsockopt(picofd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+  
+  while (n) {
+    int r = recv(picofd, p, n, 0);
+    if (r == 0) return 0;
+    if (r < 0) {
+      ERROR(TAG "recv failed: %d", r);
+      return r;
+    }
+    p += r;
+    n -= r;
+  }
+  return sizeof(pico_dat_t);
+}
+
+void control_pico_log_dat(pico_dat_t picodata) {
+  DEBUG(TAG "\n==== pico data ====\n"
+       "  uptime: %d\n"
+       "  heap_free: %d\n"
+       "  heap_min_free: %d\n"
+       "  uid: %s\n"
+       "  battery_mv: %d\n"
+       "  dist: {%f, %f, %f}\n"
+       "===================\n",
+       picodata.uptime, picodata.heap_free, picodata.heap_min_free, picodata.uid, picodata.battery_mv, picodata.dist[0], picodata.dist[1], picodata.dist[2]);
 }
 

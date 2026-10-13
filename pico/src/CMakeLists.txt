@@ -28,6 +28,13 @@ elseif(NOT DEFINED NLOGGING)
 endif()
 message("Using NLOGGING '${NLOGGING}'")
 
+if (DEFINED ENV{UPDATE_TIME_S} AND (NOT DEFINED UPDATE_TIME_S))
+  set(UPDATE_TIME_S $ENV{UPDATE_TIME_S})
+elseif(NOT DEFINED UPDATE_TIME_S)
+  set(UPDATE_TIME_S 5)
+endif()
+message("Using UPDATE_TIME_S '${UPDATE_TIME_S}'")
+
 # Conn_man library
 add_library(conn_man
   conn_man.cc
@@ -100,6 +107,7 @@ target_compile_definitions(${PROJECT_NAME}
   WIFI_PASSWORD=\"${WIFI_PASSWORD}\"
   SERVER_ADDRESS=\"${SERVER_ADDRESS}\"
   SERVER_PORT=${SERVER_PORT}
+  UPDATE_TIME_S=${UPDATE_TIME_S}
 )
 
 if (${NLOGGING} EQUAL 0)

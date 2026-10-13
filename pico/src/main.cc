@@ -18,6 +18,7 @@
 
 #define TOLERANCE 5
 #define N_SENSORS 3
+#define UPDATE_TIME_US (uint64_t) UPDATE_TIME_S * 1000 * 1000
 
 #define VSYS_GPIO 29
 #define VSYS_ADC_CH 3
@@ -322,34 +323,50 @@ static void gen_unique_id(uint8_t* g_uid) {
 
 static void worker_updater(void* args) {
   Conn_man *conn = (Conn_man*) args;
+  float d[N_SENSORS] = { 0, 0, 0 };
+  float divisor[N_SENSORS] = {0, 0, 0};
+  absolute_time_t t0 = get_absolute_time(); 
   while (!exit_task) {
     hc_reading_t r[N_SENSORS];
-    float d[N_SENSORS] = { -1.f, -1.f, -1.f };
-    
     uint n = hc_sonar_get_values(r, 3, 0);
-    for (int i=0; i<n; i++)
-      d[i] = r[i].dist_cm;
+    for (int i=0; i<n; i++) {
+      if (r[i].dist_cm > 0) {
+        d[i] += r[i].dist_cm;
+        divisor[i]++;
+      }
+    }
     if (!n) WARNING(TAG "Nothing read from hc_sonar");
 
-    print_distances(r);
-    pico_dat_t data = {
-      .magic  = PACKET_MAGIC,
-      .uptime = (uint32_t)(time_us_64() / 1000000ULL),    // wraps in 136 years
-      .heap_free = xPortGetFreeHeapSize(),
-      .heap_min_free = xPortGetMinimumEverFreeHeapSize(),
-      .battery_mv = read_vsys_mv(),
-      .dist = { d[0], d[1], d[2] }
-    };
-    memcpy(&data.uid, g_uid, sizeof(data.uid));
-    
-    INFO(TAG "s_send sending update");
-    if (!conn->s_send(&data)) {
-      ERROR(TAG "s_send failed");
-      break;
+    if (absolute_time_diff_us(t0, get_absolute_time()) >= UPDATE_TIME_US) {
+      for (int i=0; i<N_SENSORS; i++) {
+        if (divisor[i] == 0) d[i] = -1.f;
+        else d[i] /= divisor[i];
+      }
+
+      // print_distances(r);
+      INFO(TAG "dist_cm: {%.3f, %.3f, %.3f}", d[0], d[1], d[2]);
+      pico_dat_t data = {
+        .magic  = PACKET_MAGIC,
+        .uptime = (uint32_t)(time_us_64() / 1000000ULL),    // wraps in 136 years
+        .heap_free = xPortGetFreeHeapSize(),
+        .heap_min_free = xPortGetMinimumEverFreeHeapSize(),
+        .battery_mv = read_vsys_mv(),
+        .dist = { d[0], d[1], d[2] }
+      };
+      memcpy(&data.uid, g_uid, sizeof(data.uid));
+      
+      if (!conn->s_send(&data)) {
+        ERROR(TAG "update to server failed");
+        break;
+      }
+      INFO(TAG "Update sent to server");
+
+      t0 = get_absolute_time();
+      for (int i=0; i<N_SENSORS; i++) {
+        d[i] = 0; divisor[i] = 0;
+      }
     }
-    
-    INFO(TAG "Update sent to server");
-    vTaskDelay(pdMS_TO_TICKS(3000));
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
   WARNING(TAG "Worker exiting ... ");
   worker_h = NULL;

@@ -84,8 +84,8 @@ target_link_libraries(${PROJECT_NAME}
   hardware_watchdog
   FreeRTOS-Kernel
   FreeRTOS-Kernel-Heap4
-  HCSR04
   conn_man
+  HCSR04
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -102,7 +102,11 @@ target_compile_definitions(${PROJECT_NAME}
   SERVER_PORT=${SERVER_PORT}
 )
 
-pico_enable_stdio_usb(${PROJECT_NAME} 1)
+if (${NLOGGING} EQUAL 0)
+  pico_enable_stdio_usb(${PROJECT_NAME} 1)
+else()
+  pico_enable_stdio_usb(${PROJECT_NAME} 0)
+endif()
 pico_enable_stdio_uart(${PROJECT_NAME} 0)
 
 pico_add_extra_outputs(${PROJECT_NAME})

@@ -8,12 +8,14 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 
 
 #define TAG "control: "
 
 void* control_pico_thread(void* conn) {
   conn_t* picoconn = (conn_t*) conn;
+  picoconn->ismanaged = true;
   char ip[INET_ADDRSTRLEN] = {0};
   struct sockaddr_in picoaddr = picoconn->addr;
   inet_ntop(AF_INET, &picoaddr.sin_addr, ip, INET_ADDRSTRLEN);
@@ -29,6 +31,7 @@ void* control_pico_thread(void* conn) {
   memset(&s_addr, 1, sizeof(s_addr));
   s_addr.sun_family = AF_UNIX;
   strncpy(s_addr.sun_path, path, sizeof(s_addr.sun_path));
+  struct timeval tv = { .tv_sec = 3 };
   uint32_t sleep_s = 0;
   char buf[UNIX_SOCK_BF];
   char *token;
@@ -43,6 +46,7 @@ void* control_pico_thread(void* conn) {
     goto unix_cleanup;
   }
 
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
   unlink(path); // from premature shutdown
   if (bind(fd, (struct sockaddr*) &s_addr, sizeof(s_addr)) < 0) {
     ERROR(TAG "error binding unix socket, client %s:%d (%s)", ip, port, picoconn->uid);
@@ -56,13 +60,12 @@ void* control_pico_thread(void* conn) {
 
   INFO(TAG "Unix socket listening on path '%s' client %s:%d (%s)", path, ip, port, picoconn->uid);
   while (picoconn->alive) {
-    if ((clientfd = accept(fd, NULL, NULL)) < 0) {
-      WARNING(TAG "invalid unix connection client %s:%d (%s)", ip, port, picoconn->uid);
+    if ((clientfd = accept(fd, NULL, NULL)) < 0)
       continue;
-    }
+    setsockopt(clientfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     INFO(TAG "connection on unix path client %s:%d (%s)", ip, port, picoconn->uid);
     if ((readbytes = read(clientfd, buf, sizeof(buf))-1) <= 0) {
-      WARNING(TAG "read %d bytes unix path on client %s:%d (%s)", readbytes, ip, port, picoconn->uid);
+      WARNING(TAG "readtimeout; %d unix path on client %s:%d (%s)", readbytes, ip, port, picoconn->uid);
       write(clientfd, buf_err, sizeof(buf_err));
     } else {
       buf[readbytes] = '\0';

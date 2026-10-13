@@ -3,6 +3,8 @@
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+#include "common_types.h"
 #include "config.h"
 
 

@@ -9,12 +9,6 @@
 #include <hardware/gpio.h>
 
 
-#if NLOGGING == 1
-#define DEBUG_printf(...)
-#else
-#define DEBUG_printf(fmt, ...) printf("DEBUG: " fmt "\n", ##__VA_ARGS__)
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -122,7 +122,7 @@ void* handle_conn(void* conn) {
   pthread_t control_handle;
   while (picoconn->alive) {
     int n = control_pico_read_data(picofd, &picodata);
-    if (n == 1) {
+    if (n > 1) {
       if (picoconn->uid[0] == '\0') memcpy(&picoconn->uid, &picodata.uid, MAX_UID_LEN);
       INFO(TAG "received [%d] from client %s:%d (%s)", n, ip, port, picoconn->uid);
       if (!picoconn->ismanaged && picoconn->uid[0] != '\0') {

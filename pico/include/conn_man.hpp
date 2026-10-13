@@ -7,14 +7,6 @@
 #include <string.h>
 #include "common_types.h"
 
-#if NLOGGING == 1
-#define ERROR(...)
-#else
-#define ERROR(fmt, ...) printf("ERROR: " fmt "\n", ##__VA_ARGS__); \
-  perror("Error")
-#endif
-
-
 class Conn_man {
 private:
   int fd;

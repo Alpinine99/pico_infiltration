@@ -4,9 +4,13 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
+#include "logger.h"
+
 #define HC_SENSOR_GAP_MS 30
 #define HC_MAX_ECHO_TIME_US (int64_t) ((HC_MAX_DIST_CM / 0.0334f) * 2)
 #define HC_ECHO_MAX_WAIT 100 * 1000
+
+#define TAG "[HCSR04] "
 
 static volatile bool stop_task = false;
 static volatile bool task_running = false;
@@ -17,7 +21,7 @@ static struct {
 } snap;
 
 void hc_sonar_init(hc_pin_t pin) {
-  DEBUG_printf("sonar init on trig: %d, echo %d", pin.trig, pin.echo);
+  INFO(TAG "sonar init on trig: %d, echo: %d", pin.trig, pin.echo);
 
   gpio_init(pin.trig);
   gpio_set_dir(pin.trig, GPIO_OUT);
@@ -54,7 +58,7 @@ void hc_sonar_task(void* args) {
   
   uint n = params->n_sensors;
   if (n > HC_MAX_SENSORS) {
-    DEBUG_printf("n_sensors %u > %d, clamping", n, HC_MAX_SENSORS);
+    WARNING(TAG "n_sensors %u > %d, clamping", n, HC_MAX_SENSORS);
     n = HC_MAX_SENSORS;
   }
   
@@ -63,7 +67,7 @@ void hc_sonar_task(void* args) {
   for (int i=0; i<n; i++)
     hc_sonar_init(params->pins[i]);
 
-  DEBUG_printf("Stating sonar task");
+  INFO(TAG "Stating sonar task ... ");
   while (!stop_task) {
     hc_reading_t sweep[HC_MAX_SENSORS];
     for (int i=0; i<n; i++) {
@@ -83,7 +87,7 @@ void hc_sonar_task(void* args) {
   taskEXIT_CRITICAL();
   stop_task = false;
   task_running = false;
-  DEBUG_printf("sonar task exited");
+  WARNING(TAG "sonar task exited");
   vTaskDelete(NULL);
 }
 
@@ -107,8 +111,9 @@ uint hc_sonar_get_values(hc_reading_t* out, uint max_n, uint timeout) {
 
 void hc_sonar_kill_task() {
   if (!task_running) return;
-  DEBUG_printf("Stopping sonar task");
+  INFO(TAG "Stopping sonar task ... ");
   stop_task = true;
+  while (task_running) vTaskDelay(pdMS_TO_TICKS(15));
 }
   
 bool hc_sonar_is_running(void) {

@@ -24,88 +24,113 @@
 
 #define TAG "main: "
 
+typedef struct {
+  pthread_t tid;
+  conn_t conn;
+  bool used;
+} slot_t;
 
 void* handle_conn(void*);
 static void on_signal(int sig);
 static void install_signal(void);
 
 static volatile sig_atomic_t g_stop = 0;
+static slot_t slots[MAX_CONN];
 
 
 int main(void) {
   if (log_open() == -1) return 1;
   install_signal();
-  int fd, opt = 1;
+  
+  int fd, rc = 0, opt = 1;
   struct sockaddr_in sock = {
     .sin_family = AF_INET,
     .sin_port = htons(PORT),
     .sin_addr.s_addr = INADDR_ANY
   };
 
-  int picofd;
-  struct sockaddr_in picoaddr;
-  socklen_t addrlen = sizeof(picoaddr);
-  pthread_t picothread;
-  conn_t conn;
-
   DEBUG(TAG "Creating socket ...");
   if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    ERROR(TAG "Socket creation failed");
+    ERROR(TAG "Socket creation failed: %d", fd);
     return 1;
   }
 
   DEBUG(TAG "Setting SO_REUSEADDR sock opt ... ");
-  if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+  if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
     WARNING(TAG "SO_REUSEADDR failed");
-  }
 
   DEBUG(TAG "Binding socket ... ");
-  if (bind(fd, (struct sockaddr*) &sock, sizeof(sock)) < 0) {
-    ERROR(TAG "Socket bind failed");
-    goto cleanup_error;
+  if ((rc = bind(fd, (struct sockaddr*) &sock, sizeof(sock))) < 0) {
+    ERROR(TAG "Socket bind failed: %d", rc);
+    goto done;
   }
   
   DEBUG(TAG "Listening for %d connections ... ", MAX_CONN);
-  if (listen(fd, MAX_CONN) < 0) {
-    ERROR(TAG "Listen failed");
-    goto cleanup_error;
+  if ((rc = listen(fd, MAX_CONN)) < 0) {
+    ERROR(TAG "Listen failed: %d", rc);
+    goto done;
   }
 
   db_open();
   INFO(TAG "server running on 0.0.0.0:%d ...", PORT);
   while (!g_stop) {
+    struct sockaddr_in picoaddr;
+    socklen_t addrlen = sizeof(picoaddr);
+
     INFO(TAG "Awaiting connection ... ");
-    if ((picofd = accept(fd, (struct sockaddr*) &picoaddr, &addrlen)) < 0) {
-      ERROR(TAG "Accept failed");
+    int picofd = accept(fd, (struct sockaddr*) &picoaddr, &addrlen);
+    if (picofd < 0) {
+      if (picofd != EINTR) ERROR_ERRNO(TAG "Accept failed");
       continue;
     }
     DEBUG(TAG "New connection established");
-    conn.fd = picofd;
-    conn.addr = picoaddr;
-    conn.uid[0] = '\0';
-    conn.ismanaged = false;
-    conn.alive = true;
+
+    int idx = -1;
+    for (int i=0; i<MAX_CONN; i++) {
+      if (slots[i].used && pthread_tryjoin_np(slots[i].tid, NULL) == 0)
+        slots[i].used = false;
+      if(!slots[i].used && idx < 0)
+        idx = i;
+    }
+
+    if (idx < 0) {
+      WARNING(TAG "out of workers");
+      close(picofd);
+      continue;
+    }
+
+    conn_t *c = &slots[idx].conn;
+    c->fd = picofd;
+    c->addr = picoaddr;
+    c->uid[0] = '\0';
+    atomic_store(&c->ismanaged, false);
+    atomic_store(&c->alive, true);
    
-    DEBUG(TAG "Calling handler thread ... ");
-    if (pthread_create(&picothread, NULL, handle_conn, &conn) != 0) {
+    DEBUG(TAG "Creating handler thread ... ");
+    if (pthread_create(&slots[idx].tid, NULL, handle_conn, c) != 0) {
       ERROR(TAG "Failed to create worker thread");
       close(picofd);
+    } else {
+      INFO(TAG "New worker running id: %d", idx);
+      slots[idx].used = true;
     }
   }
 
-clean_up:
-  WARNING(TAG "Socket clean up ...");
-  db_close();
-  log_close();
+done:
+  WARNING(TAG "Closing server socket ...");
   close(fd);
-  return 0;
 
-cleanup_error:
-  WARNING(TAG "Cleanup after error ... ");
+  INFO(TAG "Waiting for pico thread to exit ...");
+  for (int i=0; i<MAX_CONN; i++) {
+    if (!slots[i].used) continue;
+    atomic_store(&slots[i].conn.alive, false);
+    shutdown(slots[i].conn.fd, SHUT_RDWR);
+    pthread_join(slots[i].tid, NULL);
+    slots[i].used = false;
+  }
   db_close();
   log_close();
-  close(fd);
-  return 1;
+  return rc;
 }
 
 void* handle_conn(void* conn) {
@@ -120,22 +145,26 @@ void* handle_conn(void* conn) {
 
   pico_dat_t picodata;
   pthread_t control_handle;
-  while (picoconn->alive) {
+  bool have_ctrl = false;
+  while (atomic_load(&picoconn->alive)) {
     int n = control_pico_read_data(picofd, &picodata);
     if (n > 1) {
-      if (picoconn->uid[0] == '\0') memcpy(&picoconn->uid, &picodata.uid, MAX_UID_LEN);
+      if (picoconn->uid[0] == '\0')
+        memcpy(&picoconn->uid, &picodata.uid, MAX_UID_LEN);
+
       INFO(TAG "received [%d] from client %s:%d (%s)", n, ip, port, picoconn->uid);
-      if (!picoconn->ismanaged && picoconn->uid[0] != '\0') {
+      if (!have_ctrl && picoconn->uid[0] != '\0') {
+        atomic_store(&picoconn->ismanaged, true);
         if (pthread_create(&control_handle, NULL, control_pico_thread, picoconn) != 0) {
+          atomic_store(&picoconn->ismanaged, false);
           ERROR_ERRNO(TAG "failed to create pico_control for client %s:%d (%s)", ip, port, picoconn->uid);
           picoconn->uid[0] = '\0';
-        } else picoconn->ismanaged = true;
+        } else have_ctrl = true;
       }
       control_pico_log_dat(picodata);
       db_log(&picodata);
     } else {
       ERROR(TAG "failed to read from client %s:%d (%s)", ip, port, picoconn->uid);
-      picoconn->alive = false;
       break;
     }
 
@@ -148,7 +177,8 @@ void* handle_conn(void* conn) {
   }
 
   INFO(TAG "Cleanup on clent %s:%d", ip, port);
-  picoconn->alive = false;
+  atomic_store(&picoconn->alive, false);
+  if (have_ctrl) pthread_join(control_handle, NULL);
   close(picofd);
   return NULL;
 }

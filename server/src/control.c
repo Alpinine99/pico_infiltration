@@ -15,7 +15,6 @@
 
 void* control_pico_thread(void* conn) {
   conn_t* picoconn = (conn_t*) conn;
-  picoconn->ismanaged = true;
   char ip[INET_ADDRSTRLEN] = {0};
   struct sockaddr_in picoaddr = picoconn->addr;
   inet_ntop(AF_INET, &picoaddr.sin_addr, ip, INET_ADDRSTRLEN);
@@ -26,20 +25,16 @@ void* control_pico_thread(void* conn) {
   snprintf(path, sizeof(path), "%s.%s", UNIX_SOCK_PATH, picoconn->uid);
   INFO(TAG "unix sock path '%s' client %s:%d (%s)", path, ip, port, picoconn->uid);
 
-  int fd, clientfd, readbytes, picofd = picoconn->fd;
+  int fd, picofd = picoconn->fd;
   struct sockaddr_un s_addr;
   memset(&s_addr, 1, sizeof(s_addr));
   s_addr.sun_family = AF_UNIX;
   strncpy(s_addr.sun_path, path, sizeof(s_addr.sun_path));
   struct timeval tv = { .tv_sec = 3 };
-  uint32_t sleep_s = 0;
-  char buf[UNIX_SOCK_BF];
-  char *token;
-  const char *delim = " \t\r\n";
+  
   char buf_ok[] = "OK: querry ran successfully";
   char buf_pico_err[] = "ERR: failed to send querry to pico";
   char buf_err[] = "ERR: invalid input";
-  pico_command_t pico_cmd;
 
   if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
     ERROR(TAG "error creating unix socket, client %s:%d (%s)", ip, port, picoconn->uid);
@@ -59,18 +54,24 @@ void* control_pico_thread(void* conn) {
   }
 
   INFO(TAG "Unix socket listening on path '%s' client %s:%d (%s)", path, ip, port, picoconn->uid);
-  while (picoconn->alive) {
-    if ((clientfd = accept(fd, NULL, NULL)) < 0)
+  while (atomic_load(&picoconn->alive)) {
+    int readbytes, clientfd;
+    if (picofd = accept(fd, NULL, NULL) < 0)
       continue;
+
+    char buf[UNIX_SOCK_BF] = {0};
     setsockopt(clientfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     INFO(TAG "connection on unix path client %s:%d (%s)", ip, port, picoconn->uid);
     if ((readbytes = read(clientfd, buf, sizeof(buf))-1) <= 0) {
-      WARNING(TAG "readtimeout; %d unix path on client %s:%d (%s)", readbytes, ip, port, picoconn->uid);
+      WARNING(TAG "readtimeout: %d unix path on client %s:%d (%s)", readbytes, ip, port, picoconn->uid);
       write(clientfd, buf_err, sizeof(buf_err));
     } else {
       buf[readbytes] = '\0';
       INFO(TAG "query '%s' unix path client %s:%d (%s)", buf, ip, port, picoconn->uid);
-      token = strtok(buf, delim);
+      
+      pico_command_t pico_cmd;
+      const char *delim = " \t\r\n";
+      char *token = strtok(buf, delim);
       if (strncasecmp(token, REBOOT_CMD, sizeof(REBOOT_CMD)) == 0) {
         WARNING(TAG "rebooting pico client %s:%d (%s)", ip, port, picoconn->uid);
         pico_cmd.magic = PACKET_MAGIC;
@@ -82,6 +83,7 @@ void* control_pico_thread(void* conn) {
           write(clientfd, buf_ok, sizeof(buf_ok));
       } else if (strncasecmp(token, SLEEP_CMD, sizeof(SLEEP_CMD)) == 0) {
         token = strtok(NULL, delim);
+        uint32_t sleep_s = 0;
         if ((sleep_s = atoi(token)) <= 0) {
           ERROR(TAG "invalid sleep value from command client %s:%d (%s)", ip, port, picoconn->uid);
           write(clientfd, buf_err, sizeof(buf_err));
@@ -100,13 +102,12 @@ void* control_pico_thread(void* conn) {
         write(clientfd, buf_err, sizeof(buf_err));
       }
     }
-    memset(buf, 0, sizeof(buf));
     close(clientfd);
   }
 
 unix_cleanup:
   WARNING(TAG "control stopped on client %s:%d (%s)", ip, port, picoconn->uid);
-  picoconn->ismanaged = false;
+  atomic_store(&picoconn->ismanaged, false);
   unlink(path);
   close(fd);
   return NULL;

@@ -1,7 +1,7 @@
 #pragma once 
 
 #include <netinet/in.h>
-#include <stdbool.h>
+#include <stdatomic.h>
 #include <stdint.h>
 
 #include "common_types.h"
@@ -10,8 +10,8 @@
 
 typedef struct {
   int fd;
-  bool alive;
-  bool ismanaged;
+  atomic_bool alive;
+  atomic_bool ismanaged;
   char uid[MAX_UID_LEN];
   struct sockaddr_in addr;
 } conn_t;

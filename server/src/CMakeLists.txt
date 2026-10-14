@@ -9,7 +9,12 @@ target_include_directories(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME}
   PRIVATE db_connector
-  logger
+  pthread
   control
+  logger
+)
+
+target_compile_definitions(${PROJECT_NAME}
+  PRIVATE _GNU_SOURCE
 )
 

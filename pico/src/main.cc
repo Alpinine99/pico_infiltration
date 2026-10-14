@@ -324,7 +324,9 @@ static void gen_unique_id(uint8_t* g_uid) {
 static void worker_updater(void* args) {
   Conn_man *conn = (Conn_man*) args;
   float d[N_SENSORS] = { 0, 0, 0 };
+  float lowest_val[N_SENSORS] = { HC_MAX_DIST_CM, HC_MAX_DIST_CM, HC_MAX_DIST_CM };
   float divisor[N_SENSORS] = {0, 0, 0};
+  absolute_time_t last_updated = get_absolute_time(); 
   absolute_time_t t0 = get_absolute_time(); 
   while (!exit_task) {
     hc_reading_t r[N_SENSORS];
@@ -337,21 +339,36 @@ static void worker_updater(void* args) {
     }
     if (!n) WARNING(TAG "Nothing read from hc_sonar");
 
-    if (absolute_time_diff_us(t0, get_absolute_time()) >= UPDATE_TIME_US) {
+    // average as per REACTION_TIME_MS
+    if (absolute_time_diff_us(t0, get_absolute_time()) < REACTION_TIME_MS) {
+      vTaskDelay(pdMS_TO_TICKS(50));
+      continue;
+    }
+    
+    for (int i=0; i<N_SENSORS; i++) {
+      if (divisor[i] != 0) {
+        d[i] /= divisor[i];
+        if (d[i] < lowest_val[i])
+          lowest_val[i] = d[i];
+      }
+      d[i] = 0; divisor[i] = 0;
+    }
+
+    if (absolute_time_diff_us(last_updated, get_absolute_time()) >= UPDATE_TIME_US) {
+      // print_distances(r);
       for (int i=0; i<N_SENSORS; i++) {
-        if (divisor[i] == 0) d[i] = -1.f;
-        else d[i] /= divisor[i];
+        if (lowest_val[i] == HC_MAX_DIST_CM)
+          lowest_val[i] = -1.f;
       }
 
-      // print_distances(r);
-      INFO(TAG "dist_cm: {%.3f, %.3f, %.3f}", d[0], d[1], d[2]);
+      INFO(TAG "dist_cm: {%.3f, %.3f, %.3f}", lowest_val[0], lowest_val[1], lowest_val[2]);
       pico_dat_t data = {
         .magic  = PACKET_MAGIC,
         .uptime = (uint32_t)(time_us_64() / 1000000ULL),    // wraps in 136 years
         .heap_free = xPortGetFreeHeapSize(),
         .heap_min_free = xPortGetMinimumEverFreeHeapSize(),
         .battery_mv = read_vsys_mv(),
-        .dist = { d[0], d[1], d[2] }
+        .dist = { lowest_val[0], lowest_val[1], lowest_val[2] }
       };
       memcpy(&data.uid, g_uid, sizeof(data.uid));
       
@@ -360,13 +377,11 @@ static void worker_updater(void* args) {
         break;
       }
       INFO(TAG "Update sent to server");
-
-      t0 = get_absolute_time();
-      for (int i=0; i<N_SENSORS; i++) {
-        d[i] = 0; divisor[i] = 0;
-      }
+      for (int i=0; i<N_SENSORS; i++)
+        lowest_val[i] = HC_MAX_DIST_CM;
+      last_updated = get_absolute_time();
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
+    t0 = get_absolute_time();
   }
   WARNING(TAG "Worker exiting ... ");
   worker_h = NULL;

@@ -147,6 +147,29 @@
     }
   };
 
+  /* Reset points: per Pico, the newest row id at the moment "Reset alerts" was pressed.
+   * Rows up to that id are ignored by the jump detector, so the graph returns to normal
+   * and the next reading becomes the new baseline. Stored so a page reload keeps it. */
+  const resetAt = (() => {
+    try {
+      return new Map(
+        Object.entries(JSON.parse(localStorage.getItem("pico.resetAt") || "{}")),
+      );
+    } catch {
+      return new Map();
+    }
+  })();
+  const saveResets = () => {
+    try {
+      localStorage.setItem(
+        "pico.resetAt",
+        JSON.stringify(Object.fromEntries(resetAt)),
+      );
+    } catch {
+      /* private mode */
+    }
+  };
+
   const S = {
     lastId: 0,
     tick: 0,
@@ -181,10 +204,11 @@
 
   function analyzeDevice(dev, silent) {
     const rows = S.rows.get(dev) || [],
+      cut = Number(resetAt.get(dev) || 0),
       res = {};
     for (const ch of CH) {
       const a = analyze(
-        rows.map((r) => r[ch]),
+        rows.map((r) => (r.id <= cut ? null : r[ch])),
         tuning,
       );
       res[ch] = a;
@@ -196,6 +220,22 @@
       }
     }
     S.analysis.set(dev, res);
+  }
+
+  function resetAlerts() {
+    const dev = S.selected;
+    if (!dev) return;
+    const rows = S.rows.get(dev) || [];
+    const newest = rows.length ? rows[rows.length - 1].id : S.lastId;
+    resetAt.set(dev, newest);
+    saveResets();
+    analyzeDevice(dev, true);
+    refreshChart();
+    renderDevices();
+    addLines("frames", [
+      { text: `RESET  ${dev}: alerts cleared, baseline re-learned`, cls: "ln-warn" },
+    ]);
+    toast(`Alerts reset for ${dev}`, "ok");
   }
 
   function raiseAlert(dev, ch, ev) {
@@ -395,6 +435,10 @@
               text: "No Pico has reported yet.",
             }),
           ]),
+    );
+    $("#btn-reset").classList.toggle(
+      "alerting",
+      !!S.selected && activeAlerts(S.selected).length > 0,
     );
     document.title = names.some((n) => activeAlerts(n).length)
       ? "(!) Pico monitor"
@@ -697,6 +741,7 @@
     $("#btn-notify").classList.toggle("on", S.alertsOn);
   });
 
+  $("#btn-reset").addEventListener("click", resetAlerts);
   $("#chart-device").addEventListener("change", (e) =>
     selectDevice(e.target.value),
   );

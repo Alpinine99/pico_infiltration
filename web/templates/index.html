@@ -58,10 +58,18 @@
             <label
               >±<input id="tn-tol" type="number" min="0" step="1" /> cm</label
             >
+            <button
+              class="btn small"
+              id="btn-reset"
+              type="button"
+              title="Clear red alerts on this graph and treat the current reading as normal"
+            >
+              Reset alerts
+            </button>
           </div>
         </div>
         <div class="chart-wrap">
-          <canvas id="chart"></canvas>
+          <div class="chart-box"><canvas id="chart"></canvas></div>
           <div class="empty" id="chart-empty">Waiting for data…</div>
         </div>
       </section>

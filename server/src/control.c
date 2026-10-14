@@ -56,10 +56,10 @@ void* control_pico_thread(void* conn) {
   INFO(TAG "Unix socket listening on path '%s' client %s:%d (%s)", path, ip, port, picoconn->uid);
   while (atomic_load(&picoconn->alive)) {
     int readbytes, clientfd;
-    if (picofd = accept(fd, NULL, NULL) < 0)
+    char buf[UNIX_SOCK_BF] = {0};
+    if ((clientfd = accept(fd, NULL, NULL)) < 0)
       continue;
 
-    char buf[UNIX_SOCK_BF] = {0};
     setsockopt(clientfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     INFO(TAG "connection on unix path client %s:%d (%s)", ip, port, picoconn->uid);
     if ((readbytes = read(clientfd, buf, sizeof(buf))-1) <= 0) {

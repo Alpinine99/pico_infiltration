@@ -153,12 +153,13 @@ void* handle_conn(void* conn) {
         memcpy(&picoconn->uid, &picodata.uid, MAX_UID_LEN);
 
       INFO(TAG "received [%d] from client %s:%d (%s)", n, ip, port, picoconn->uid);
-      if (!have_ctrl && picoconn->uid[0] != '\0') {
+      if (!have_ctrl && picoconn->uid[0] != '\0' && !atomic_load(&picoconn->ismanaged)) {
         atomic_store(&picoconn->ismanaged, true);
         if (pthread_create(&control_handle, NULL, control_pico_thread, picoconn) != 0) {
           atomic_store(&picoconn->ismanaged, false);
           ERROR_ERRNO(TAG "failed to create pico_control for client %s:%d (%s)", ip, port, picoconn->uid);
           picoconn->uid[0] = '\0';
+          have_ctrl = false;
         } else have_ctrl = true;
       }
       control_pico_log_dat(picodata);
@@ -178,7 +179,10 @@ void* handle_conn(void* conn) {
 
   INFO(TAG "Cleanup on clent %s:%d", ip, port);
   atomic_store(&picoconn->alive, false);
-  if (have_ctrl) pthread_join(control_handle, NULL);
+  if (have_ctrl && atomic_load(&picoconn->ismanaged)) {
+    INFO(TAG "waiting for control thread to exit ... ");
+    pthread_join(control_handle, NULL);
+  }
   close(picofd);
   return NULL;
 }

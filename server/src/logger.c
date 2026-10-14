@@ -28,6 +28,7 @@ void log_close(void) {
 }
 
 void log_write(log_level_t lvl, const char *fmt, ...) {
+  if (NDEBUG == 1 && lvl == LOG_DEBUG) return;
   char ts[32], msg[512];
   time_t now = time(NULL);
   struct tm tm;

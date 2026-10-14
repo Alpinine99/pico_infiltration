@@ -14,7 +14,7 @@ target_include_directories(logger
 )
 
 target_compile_definitions(logger
-  PRIVATE NDEBUG=0
+  PRIVATE NDEBUG=1
 )
 
 # db connector

@@ -1,0 +1,32 @@
+#!/bin/bash
+
+[[ `id -u` -ne 0 ]] && printf "ERROR: $0 must be ran as root\n" >&2 && exit 1
+
+set -e
+
+apt-get install libsqlite3-dev cmake make -y
+mkdir -p /var/www/infil
+cp -r . /var/www/infil
+cd /var/www/infil/server
+
+mkdir -p build
+cd build && cmake .. && make -j2
+cd ..
+
+chown www-data:www-data -R /var/www/infil
+
+[[ -L "/etc/fail2ban/filter.d/infil.conf" ]] && rm -f "/etc/fail2ban/filter.d/infil.conf"
+ln -s "$(realpath fail2ban/filter.d/infil.conf)" "/etc/fail2ban/filter.d/"
+[[ -L "/etc/fail2ban/jail.d/infil.conf" ]] && rm -f "/etc/fail2ban/jail.d/infil.conf"
+ln -s "$(realpath fail2ban/jail.d/infil.conf)" "/etc/fail2ban/jail.d/infil.conf"
+
+# [[ -L "/etc/nginx/sites-enabled/infil.conf" ]] && rm -f "/etc/nginx/sites-enabled/infil.conf"
+# ln -s "$(realpath nginx/sites-available/infil.conf)" "/etc/nginx/sites-enabled/infil.conf"
+
+systemctl link ./infil.service
+systemctl daemon-reload
+systemctl enable infil --now
+
+# systemctl restart nginx
+fail2ban-client reload
+

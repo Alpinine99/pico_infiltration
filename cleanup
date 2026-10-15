@@ -1,0 +1,16 @@
+#!/bin/bash
+
+[[ `id -u` -ne 0 ]] && printf "ERROR: $0 must be ran as root\n" >&2 && exit 1
+
+systemctl disable infil --now
+systemctl daemon-reload
+
+
+[[ -L "/etc/fail2ban/filter.d/infil.conf" ]] && rm -f "/etc/fail2ban/filter.d/infil.conf"
+[[ -L "/etc/fail2ban/jail.d/infil.conf" ]] && rm -f "/etc/fail2ban/jail.d/infil.conf"
+
+rm -rf /var/www/infil
+rm -rf /var/log/infil
+
+fail2ban-client reload
+

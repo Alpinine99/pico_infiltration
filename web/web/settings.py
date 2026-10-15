@@ -74,6 +74,8 @@ WSGI_APPLICATION = 'web.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+DB_PATH = "/var/www/infil/pico_db.sqlite3"
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -81,7 +83,7 @@ DATABASES = {
     },
     'pico': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': f'file:{os.path.realpath(BASE_DIR / "../pico_db.sqlite3")}?mode=ro',
+        'NAME': f'file:{DB_PATH}?mode=ro',
     }
 }
 DATABASE_ROUTERS = ['web.routers.PicoRouter']
@@ -131,6 +133,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'appstatic')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Pico controls
-PICO_CONTROL_ADDR = BASE_DIR / "../control.sock"
-PICO_SERVER_LOG = BASE_DIR / "../server.log" 
+PICO_CONTROL_ADDR = "/run/infil/control.sock"
+PICO_SERVER_LOG = "/var/log/infil/server.log" 
 

@@ -3,6 +3,7 @@
 #define PORT 9090
 #define MAX_CONN 4
 #define SOCK_READ_TIMEOUT (1000 * 10)
+#define INVALID_PACKET_TOLERANCE 3
 
 #define REBOOT_CMD "REBOOT"
 #define SLEEP_CMD  "SLEEP"

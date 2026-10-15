@@ -1,4 +1,5 @@
 #pragma once
+
 #include <stdint.h>
 
 #define PACKET_MAGIC 0xA55A

@@ -115,6 +115,7 @@ unix_cleanup:
 
 int control_pico_send_cmd(int picofd, pico_command_t* cmd) {
   int n;
+  cmd->magic = PACKET_MAGIC;
   if ((n = send(picofd, cmd, sizeof(pico_command_t), 0)) <= 0)
     ERROR(TAG "control_pico_send_cmd failed: %d", n);
   else INFO(TAG "control_pico_send_cmd sent pico command");
@@ -138,7 +139,7 @@ int control_pico_read_data(int picofd, pico_dat_t* data) {
     p += r;
     n -= r;
   }
-  return sizeof(pico_dat_t);
+  return data->magic != PACKET_MAGIC ? SCANNER_PACKET : sizeof(pico_dat_t);
 }
 
 void control_pico_log_dat(pico_dat_t picodata) {

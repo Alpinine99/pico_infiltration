@@ -146,6 +146,8 @@ void* handle_conn(void* conn) {
   pico_dat_t picodata;
   pthread_t control_handle;
   bool have_ctrl = false;
+  uint invalid_packet_count = 0;
+  pico_command_t ping = { .type = CMD_PING, .sleep_n_sec = 10 };
   while (atomic_load(&picoconn->alive)) {
     int n = control_pico_read_data(picofd, &picodata);
     if (n > 1) {
@@ -164,17 +166,22 @@ void* handle_conn(void* conn) {
       }
       control_pico_log_dat(picodata);
       db_log(&picodata);
+      control_pico_send_cmd(picofd, &ping);
+      invalid_packet_count = 0;
     } else {
-      ERROR(TAG "failed to read from client %s:%d (%s)", ip, port, picoconn->uid);
-      break;
+      if (n == SCANNER_PACKET) {
+        if (invalid_packet_count >= INVALID_PACKET_TOLERANCE) {
+          ERROR(TAG "definetely a scanner; IP: %s", ip);
+          break;
+        } else {
+          WARNING(TAG "potential scanner; got invalid packet from %s:%d (%s)", ip, port, picoconn->uid);
+          invalid_packet_count++;
+        }
+      } else {
+        ERROR(TAG "failed to read from client %s:%d (%s)", ip, port, picoconn->uid);
+        break;
+      }
     }
-
-    pico_command_t cmd = {
-      .magic = PACKET_MAGIC,
-      .type = CMD_PING,
-      .sleep_n_sec = 10
-    };
-    control_pico_send_cmd(picofd, &cmd);
   }
 
   INFO(TAG "Cleanup on clent %s:%d", ip, port);

@@ -1,0 +1,6 @@
+debian based:
+  libsqlite3-dev
+
+void linux:
+  sqlite3-devel
+

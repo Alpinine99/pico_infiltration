@@ -13,7 +13,12 @@ systemctl daemon-reload
 [[ -L "/etc/nginx/sites-enabled/infil.conf" ]] && rm -f "/etc/nginx/sites-enabled/infil.conf"
 
 rm -rf /var/www/infil
+rm -rf /var/www/infilUI
 rm -rf /var/log/infil
+rm -rf /var/log/infilUI
+
+ufw delete allow 65254/tcp
+ufw delete allow 4499/tcp
 
 systemctl restart nginx
 fail2ban-client reload

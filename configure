@@ -13,8 +13,6 @@ mkdir -p build
 cd build && cmake .. && make -j2
 cd ..
 
-chown www-data:www-data -R /var/www/infil
-
 [[ -L "/etc/fail2ban/filter.d/infil.conf" ]] && rm -f "/etc/fail2ban/filter.d/infil.conf"
 ln -s "$(realpath fail2ban/filter.d/infil.conf)" "/etc/fail2ban/filter.d/"
 [[ -L "/etc/fail2ban/jail.d/infil.conf" ]] && rm -f "/etc/fail2ban/jail.d/infil.conf"
@@ -40,6 +38,8 @@ ln -s "$(realpath fail2ban/jail.d/infilUI.conf)" "/etc/fail2ban/jail.d/infilUI.c
 
 [[ -L "/etc/nginx/sites-enabled/infil.conf" ]] && rm -f "/etc/nginx/sites-enabled/infil.conf"
 ln -s "$(realpath nginx/sites-available/infil.conf)" "/etc/nginx/sites-enabled/infil.conf"
+
+chown www-data:www-data -R /var/www/infil
 
 systemctl link ./infilUI.service
 systemctl daemon-reload

@@ -7,4 +7,5 @@ build.env
 *.bac
 *__pycache__*
 */appstatic/*
+*/.env
 

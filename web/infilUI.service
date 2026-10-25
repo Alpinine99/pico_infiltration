@@ -1,0 +1,22 @@
+[Unit]
+Description=pico infil site
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+RuntimeDirectory=infilUI
+RuntimeDirectoryMode=0755
+WorkingDirectory=/var/www/infil/web
+Environment="PATH=/var/www/infil/web/.venv/bin"
+ExecStart=/var/www/infil/web/.venv/bin/gunicorn web.wsgi:application \
+  --bind unix:/run/infilUI/infil.sock --workers 3 --timeout 120 \
+  --control-socket /run/infilUI/gunicorn.ctl
+LogsDirectory=infilUI
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

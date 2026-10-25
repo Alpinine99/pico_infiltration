@@ -363,7 +363,6 @@ static void worker_updater(void* args) {
 
       INFO(TAG "dist_cm: {%.3f, %.3f, %.3f}", lowest_val[0], lowest_val[1], lowest_val[2]);
       pico_dat_t data = {
-        .magic  = PACKET_MAGIC,
         .uptime = (uint32_t)(time_us_64() / 1000000ULL),    // wraps in 136 years
         .heap_free = xPortGetFreeHeapSize(),
         .heap_min_free = xPortGetMinimumEverFreeHeapSize(),

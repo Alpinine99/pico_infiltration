@@ -20,13 +20,33 @@ ln -s "$(realpath fail2ban/filter.d/infil.conf)" "/etc/fail2ban/filter.d/"
 [[ -L "/etc/fail2ban/jail.d/infil.conf" ]] && rm -f "/etc/fail2ban/jail.d/infil.conf"
 ln -s "$(realpath fail2ban/jail.d/infil.conf)" "/etc/fail2ban/jail.d/infil.conf"
 
-# [[ -L "/etc/nginx/sites-enabled/infil.conf" ]] && rm -f "/etc/nginx/sites-enabled/infil.conf"
-# ln -s "$(realpath nginx/sites-available/infil.conf)" "/etc/nginx/sites-enabled/infil.conf"
-
 systemctl link ./infil.service
 systemctl daemon-reload
 systemctl enable infil --now
-
-# systemctl restart nginx
 fail2ban-client reload
+
+cd ../web
+python3 -mvenv .venv
+source .venv/bin/activate
+pip3 install -r requirements.txt
+
+python3 manage.py migrate
+python3 manage.py collectstatic
+
+[[ -L "/etc/fail2ban/filter.d/infilUI.conf" ]] && rm -f "/etc/fail2ban/filter.d/infilUI.conf"
+ln -s "$(realpath fail2ban/filter.d/infilUI.conf)" "/etc/fail2ban/filter.d/"
+[[ -L "/etc/fail2ban/jail.d/infilUI.conf" ]] && rm -f "/etc/fail2ban/jail.d/infilUI.conf"
+ln -s "$(realpath fail2ban/jail.d/infilUI.conf)" "/etc/fail2ban/jail.d/infilUI.conf"
+
+[[ -L "/etc/nginx/sites-enabled/infil.conf" ]] && rm -f "/etc/nginx/sites-enabled/infil.conf"
+ln -s "$(realpath nginx/sites-available/infil.conf)" "/etc/nginx/sites-enabled/infil.conf"
+
+systemctl link ./infilUI.service
+systemctl daemon-reload
+systemctl enable infilUI --now
+systemctl restart nginx
+fail2ban-client reload
+
+ufw allow 65254/tcp
+ufw allow 4499/tcp
 

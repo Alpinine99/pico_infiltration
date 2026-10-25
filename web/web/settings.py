@@ -1,3 +1,4 @@
+
 """
 Django settings for web project.
 
@@ -10,24 +11,32 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / ".env")
+
+def env_list(name):
+    return [v.strip() for v in os.environ.get(name, "").split(",") if v.strip()]
+
+
+try:
+    SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]       # no default: fail loudly if missing
+except KeyError:
+    raise ImproperlyConfigured("Set the DJANGO_SECRET_KEY environment variable")
+
+DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
+
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")                  # e.g. "example.com,127.0.0.1,localhost"
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")    # e.g. "https://example.com:4499"
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-om5di_u=1k8pn-klted50l&bapn0xhcf@e@zb+*-y_ivmcu$9p'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = ['*']
-
 
 # Application definition
 
@@ -70,6 +79,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'web.wsgi.application'
 
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -134,5 +147,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Pico controls
 PICO_CONTROL_ADDR = "/run/infil/control.sock"
-PICO_SERVER_LOG = "/var/log/infil/server.log" 
+PICO_SERVER_LOG = "/var/log/infil/update.log" 
 

@@ -40,6 +40,7 @@ bool Conn_man::s_send(pico_dat_t* data) {
     ERROR(TAG "Connection not established");
     return false;
   }
+  data->magic = PACKET_MAGIC;
   if (send(fd, data, sizeof(pico_dat_t), 0) < 0) {
     ERROR(TAG "Failed to send: %d", errno);
     this->is_connected = false;
@@ -70,7 +71,7 @@ int Conn_man::s_read(pico_command_t* cmd) {
     n -= r;
   }
   n_misses = 0;
-  return sizeof(pico_command_t);;
+  return cmd->magic != PACKET_MAGIC ? -1 : sizeof(pico_command_t);
 }
 
 bool Conn_man::s_is_connected(void) {
